@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧课堂点名台（支持小组点名）</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        chalk: '#f8f5e6',
+                        blackboard: '#2b4b3c',
+                        techBlue: '#10203b'
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .blackboard-bg {
+                background-color: #2b4b3c;
+                background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+                background-size: 24px 24px;
+            }
+            .tech-bg {
+                background-color: #10203b;
+            }
+            .glass-dark {
+                background: rgba(0,0,0,0.2);
+                backdrop-filter: blur(6px);
+            }
+        }
+        @keyframes rollText {
+            0% { transform: translateY(-8px); opacity:0.6; }
+            50% { transform: translateY(4px); opacity:1; }
+            100% { transform: translateY(-8px); opacity:0.6; }
+        }
+        .rolling-animate{
+            animation: rollText 0.08s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6 transition-all duration-700 blackboard-bg" id="pageBody">
+    <!-- 头部 -->
+    <header class="flex justify-between items-center mb-6">
+        <h1 class="text-[clamp(1.6rem,4vw,2.6rem)] font-bold text-chalk">
+            <i class="fa fa-graduation-cap"></i> 智慧课堂点名台
+        </h1>
+        <button onclick="toggleTheme()" class="px-3 py-2 rounded-lg bg-white/10 text-chalk border-none">
+            <i class="fa fa-moon-o"></i> 切换主题
+        </button>
+    </header>
+
+    <!-- 考勤统计面板 -->
+    <div class="glass-dark rounded-2xl p-4 mb-6">
+        <h2 class="text-xl font-bold text-chalk mb-3"><i class="fa fa-calculator"></i> 实时考勤统计</h2>
+        <div class="flex gap-3 overflow-x-auto pb-2">
+            <div class="min-w-[120px] rounded-xl bg-white/8 p-2 text-center">
+                <div class="text-2xl font-bold text-chalk" id="statTotal">0</div>
+                <div class="text-sm text-chalk opacity-70">总人数</div>
+            </div>
+            <div class="min-w-[120px] rounded-xl bg-white/8 p-2 text-center">
+                <div class="text-2xl font-bold text-chalk" id="statChecked">0</div>
+                <div class="text-sm text-chalk opacity-70">已点名</div>
+            </div>
+            <div class="min-w-[120px] rounded-xl bg-emerald-500/20 p-2 text-center">
+                <div class="text-2xl font-bold text-emerald-300" id="statPresent">0</div>
+                <div class="text-sm text-chalk opacity-70">✅到课</div>
+            </div>
+            <div class="min-w-[120px] rounded-xl bg-orange-500/20 p-2 text-center">
+                <div class="text-2xl font-bold text-orange-300" id="statLate">0</div>
+                <div class="text-sm text-chalk opacity-70">⏱️迟到</div>
+            </div>
+            <div class="min-w-[120px] rounded-xl bg-rose-500/20 p-2 text-center">
+                <div class="text-2xl font-bold text-rose-300" id="statAbsent">0</div>
+                <div class="text-sm text-chalk opacity-70">❌缺勤</div>
+            </div>
+            <div class="min-w-[120px] rounded-xl bg-blue-500/20 p-2 text-center">
+                <div class="text-2xl font-bold text-blue-300" id="statRate">0%</div>
+                <div class="text-sm text-chalk opacity-70">到课率</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <!-- 主点名面板 -->
+        <div class="lg:col-span-2 glass-dark rounded-2xl p-6">
+            <div class="text-center">
+                <div id="nameDisplay" class="text-[clamp(2rem,7vw,4rem)] font-bold text-chalk h-20 leading-[80px]">准备开始智能点名</div>
+                <p class="text-chalk opacity-80 my-3" id="modeTip">加权智能模式｜久未点名同学优先抽取</p>
+
+                <div class="flex justify-center gap-3 my-5">
+                    <button onclick="startRoll()" id="btnStart" class="px-8 py-3 rounded-xl font-bold bg-yellow-400 text-gray-800">
+                        <i class="fa fa-play"></i> 开始点名
+                    </button>
+                    <button onclick="stopRoll()" id="btnStop" disabled class="px-8 py-3 rounded-xl font-bold bg-red-500 text-white disabled:opacity-40">
+                        <i class="fa fa-stop"></i> 停止
+                    </button>
+                </div>
+
+                <div id="resultPanel" class="hidden mt-6">
+                    <div class="flex justify-center gap-3 flex-wrap">
+                        <button onclick="setStatus('present')" class="px-4 py-2 rounded-lg bg-emerald-500 text-white">✅ 到课</button>
+                        <button onclick="setStatus('late')" class="px-4 py-2 rounded-lg bg-orange-500 text-white">⏱️ 迟到</button>
+                        <button onclick="setStatus('absent')" class="px-4 py-2 rounded-lg bg-rose-500 text-white">❌ 缺勤</button>
+                    </div>
+                </div>
+
+                <!-- 模式选项（移除举手优先，只剩两个可用功能） -->
+                <div class="flex justify-center gap-5 flex-wrap mt-6 text-chalk text-sm">
+                    <label class="flex items-center gap-1">
+                        <input type="checkbox" id="weightMode" onchange="saveConfig();updateModeTip()" checked> 智能加权点名
+                    </label>
+                    <label class="flex items-center gap-1">
+                        <input type="checkbox" id="groupMode" onchange="saveConfig();updateModeTip()"> 小组点名模式
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- 侧边卡片组 -->
+        <div class="space-y-5 overflow-y-auto max-h-[80vh] pr-1">
+            <!-- 热力看板 -->
+            <div class="glass-dark rounded-2xl p-4">
+                <h3 class="text-lg font-bold text-chalk mb-3"><i class="fa fa-bar-chart"></i> 课堂热力看板</h3>
+                <canvas id="heatChartCanvas"></canvas>
+                <p class="text-xs text-chalk opacity-70 text-center mt-1">柱状越高代表被点名次数越多</p>
+            </div>
+
+            <!-- 名单管理 -->
+            <div class="glass-dark rounded-2xl p-4">
+                <h3 class="text-lg font-bold text-chalk mb-3"><i class="fa fa-users"></i> 学生名单</h3>
+                <p class="text-xs text-chalk opacity-60 mb-2">格式示例：张三:一组<br>李四:一组<br>王五:二组</p>
+                <textarea id="listInput" class="w-full min-h-[140px] p-2 rounded-lg bg-white/10 text-chalk border border-white/20" placeholder="每行一条，支持 名字:小组名"></textarea>
+                <div class="flex gap-2 mt-3">
+                    <button onclick="loadStudentList()" class="flex-1 py-2 rounded-lg bg-green-500 text-white">导入名单</button>
+                    <button onclick="clearAllList()" class="flex-1 py-2 rounded-lg bg-gray-500 text-white">清空</button>
+                </div>
+                <div class="mt-3 max-h-56 overflow-y-auto" id="nameListBox"></div>
+            </div>
+
+            <!-- 点名记录 -->
+            <div class="glass-dark rounded-2xl p-4">
+                <h3 class="text-lg font-bold text-chalk mb-3"><i class="fa fa-list"></i> 点名记录</h3>
+                <div class="max-h-56 overflow-y-auto text-chalk text-sm" id="recordBox"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // 全局变量
+    let studentList = []
+    let callRecord = []
+    let selectedStudent = null
+    let rollTimer = null
+    let heatChart = null
+
+    // 更新模式提示文字
+    function updateModeTip(){
+        const tipDom = document.getElementById("modeTip")
+        if(document.getElementById("groupMode").checked){
+            tipDom.innerText = "小组点名模式｜先随机抽取小组，再抽取组内学生"
+        }else if(document.getElementById("weightMode").checked){
+            tipDom.innerText = "加权智能模式｜久未点名同学优先抽取"
+        }else{
+            tipDom.innerText = "普通随机点名模式"
+        }
+    }
+
+    // 初始化
+    function init(){
+        loadStorage()
+        renderNameList()
+        renderRecord()
+        updateStatPanel()
+        drawHeatChart()
+        applyTheme()
+        updateModeTip()
+    }
+
+    // 本地存储读写
+    function loadStorage(){
+        studentList = JSON.parse(localStorage.getItem("studentList") || "[]")
+        callRecord = JSON.parse(localStorage.getItem("callRecord") || "[]")
+        const cfg = JSON.parse(localStorage.getItem("config") || '{"theme":"blackboard","weightMode":true,"groupMode":false}')
+        document.getElementById("weightMode").checked = cfg.weightMode
+        document.getElementById("groupMode").checked = cfg.groupMode
+        window.currentTheme = cfg.theme
+    }
+    function saveConfig(){
+        const cfg = {
+            theme: window.currentTheme,
+            weightMode: document.getElementById("weightMode").checked,
+            groupMode: document.getElementById("groupMode").checked
+        }
+        localStorage.setItem("config", JSON.stringify(cfg))
+    }
+
+    // 主题切换
+    function toggleTheme(){
+        window.currentTheme = window.currentTheme === "blackboard" ? "tech" : "blackboard"
+        applyTheme()
+        saveConfig()
+    }
+    function applyTheme(){
+        const body = document.getElementById("pageBody")
+        if(window.currentTheme === "tech"){
+            body.classList.remove("blackboard-bg")
+            body.classList.add("tech-bg")
+        }else{
+            body.classList.remove("tech-bg")
+            body.classList.add("blackboard-bg")
+        }
+    }
+
+    // 获取所有小组
+    function getGroupList(){
+        let groups = [...new Set(studentList.map(s=>s.group).filter(g=>g))]
+        return groups
+    }
+
+    // 加权随机抽取单人 ✅ 可用
+    function weightedPick(){
+        if(studentList.length ===0) return null
+        const weightArr = studentList.map(item=>{
+            const w = Math.max(1, 10 - (item.callCount||0))
+            return {...item, w}
+        })
+        let totalW = weightArr.reduce((sum,i)=>sum+i.w,0)
+        let rand = Math.random() * totalW
+        for(let s of weightArr){
+            rand -= s.w
+            if(rand <=0) return s
+        }
+        return weightArr[0]
+    }
+
+    // 小组模式抽取 ✅ 可用
+    function groupPick(){
+        const groups = getGroupList()
+        if(groups.length ===0){
+            alert("未配置小组信息！请按 名字:组名 格式导入名单");
+            return null
+        }
+        const randomGroup = groups[Math.floor(Math.random()*groups.length)]
+        const groupMembers = studentList.filter(s=>s.group === randomGroup)
+        if(groupMembers.length ===0) return null
+        const weightArr = groupMembers.map(item=>{
+            const w = Math.max(1, 10 - (item.callCount||0))
+            return {...item, w}
+        })
+        let totalW = weightArr.reduce((sum,i)=>sum+i.w,0)
+        let rand = Math.random() * totalW
+        for(let s of weightArr){
+            rand -= s.w
+            if(rand <=0) return s
+        }
+        return weightArr[0]
+    }
+
+    // 普通随机单人
+    function normalPick(){
+        if(studentList.length ===0) return null
+        return studentList[Math.floor(Math.random()*studentList.length)]
+    }
+
+    // 点名滚动
+    function startRoll(){
+        if(studentList.length ===0){
+            alert("请先导入学生名单！")
+            return
+        }
+        if(document.getElementById("groupMode").checked && getGroupList().length ===0){
+            alert("小组点名模式需要配置小组！导入格式：名字:一组")
+            return
+        }
+        document.getElementById("btnStart").disabled = true
+        document.getElementById("btnStop").disabled = false
+        document.getElementById("resultPanel").classList.add("hidden")
+        const nameDom = document.getElementById("nameDisplay")
+        nameDom.classList.add("rolling-animate")
+        rollTimer = setInterval(()=>{
+            let pick
+            if(document.getElementById("groupMode").checked){
+                pick = groupPick()
+            }else if(document.getElementById("weightMode").checked){
+                pick = weightedPick()
+            }else{
+                pick = normalPick()
+            }
+            if(pick) nameDom.innerText = pick.name + (pick.group ? `（${pick.group}）`:"")
+        },80)
+    }
+    function stopRoll(){
+        clearInterval(rollTimer)
+        document.getElementById("btnStart").disabled = false
+        document.getElementById("btnStop").disabled = true
+        const nameDom = document.getElementById("nameDisplay")
+        nameDom.classList.remove("rolling-animate")
+        let pick
+        if(document.getElementById("groupMode").checked){
+            pick = groupPick()
+        }else if(document.getElementById("weightMode").checked){
+            pick = weightedPick()
+        }else{
+            pick = normalPick()
+        }
+        if(!pick) return
+        selectedStudent = pick
+        nameDom.innerText = pick.name + (pick.group ? `（${pick.group}）`:"")
+        document.getElementById("resultPanel").classList.remove("hidden")
+    }
+
+    // 设置考勤状态
+    function setStatus(status){
+        if(!selectedStudent) return
+        let list = [...studentList]
+        const idx = list.findIndex(x=>x.name === selectedStudent.name)
+        if(idx !== -1) list[idx].callCount = (list[idx].callCount||0)+1
+        let statusText = "✅到课"
+        if(status === "late") statusText = "⏱️迟到"
+        if(status === "absent") statusText = "❌缺勤"
+        const rec = {
+            name: selectedStudent.name,
+            group: selectedStudent.group||"无分组",
+            status,
+            statusText,
+            time: new Date().toLocaleString()
+        }
+        callRecord.push(rec)
+        studentList = list
+        localStorage.setItem("studentList", JSON.stringify(studentList))
+        localStorage.setItem("callRecord", JSON.stringify(callRecord))
+        selectedStudent = null
+        document.getElementById("resultPanel").classList.add("hidden")
+        document.getElementById("nameDisplay").innerText = "准备开始智能点名"
+        renderNameList()
+        renderRecord()
+        updateStatPanel()
+        drawHeatChart()
+    }
+
+    // 更新统计面板
+    function updateStatPanel(){
+        const total = studentList.length
+        const present = callRecord.filter(r=>r.status==="present").length
+        const late = callRecord.filter(r=>r.status==="late").length
+        const absent = callRecord.filter(r=>r.status==="absent").length
+        const checked = present + late + absent
+        const rate = checked>0 ? Math.round((present/checked)*100) : 0
+        document.getElementById("statTotal").innerText = total
+        document.getElementById("statChecked").innerText = checked
+        document.getElementById("statPresent").innerText = present
+        document.getElementById("statLate").innerText = late
+        document.getElementById("statAbsent").innerText = absent
+        document.getElementById("statRate").innerText = rate + "%"
+    }
+
+    // 名单导入渲染，支持名字:组名解析
+    function loadStudentList(){
+        const text = document.getElementById("listInput").value.trim()
+        if(!text){
+            alert("请输入学生名单！")
+            return
+        }
+        const rawLines = text.split(/[\n]/).map(n=>n.trim()).filter(n=>n)
+        let oldList = JSON.parse(localStorage.getItem("studentList") || "[]")
+        let newList = []
+        rawLines.forEach(line=>{
+            if(line.indexOf(":") !== -1){
+                const arr = line.split(":")
+                const name = arr[0].trim()
+                const group = arr[1].trim()
+                const findOne = oldList.find(s=>s.name === name)
+                if(findOne){
+                    findOne.group = group
+                    newList.push(findOne)
+                }else{
+                    newList.push({name, group, callCount:0})
+                }
+            }else{
+                const name = line
+                const findOne = oldList.find(s=>s.name === name)
+                if(findOne) newList.push(findOne)
+                else newList.push({name, group:"", callCount:0})
+            }
+        })
+        studentList = newList
+        localStorage.setItem("studentList", JSON.stringify(studentList))
+        document.getElementById("listInput").value = ""
+        renderNameList()
+        updateStatPanel()
+        drawHeatChart()
+        alert("名单导入成功！已识别小组信息")
+    }
+    function clearAllList(){
+        if(!confirm("确认清空名单和全部点名记录？")) return
+        studentList = []
+        callRecord = []
+        localStorage.setItem("studentList", JSON.stringify([]))
+        localStorage.setItem("callRecord", JSON.stringify([]))
+        renderNameList()
+        renderRecord()
+        updateStatPanel()
+        drawHeatChart()
+    }
+    function renderNameList(){
+        const box = document.getElementById("nameListBox")
+        if(studentList.length ===0){
+            box.innerHTML = `<div class="text-chalk opacity-60 text-center py-3">暂无名单</div>`
+            return
+        }
+        box.innerHTML = studentList.map(item=>`
+            <div class="flex justify-between py-2 border-b border-white/10 text-chalk text-sm">
+                <span>${item.name} ${item.group?"【"+item.group+"】":""}</span>
+                <span class="opacity-60">点名${item.callCount}次</span>
+            </div>
+        `).join("")
+    }
+
+    // 点名记录渲染
+    function renderRecord(){
+        const box = document.getElementById("recordBox")
+        if(callRecord.length ===0){
+            box.innerHTML = `<div class="text-chalk opacity-60 text-center py-3">暂无点名记录</div>`
+            return
+        }
+        box.innerHTML = callRecord.map(r=>`
+            <div class="py-2 border-b border-white/10">${r.time}｜${r.name}${r.group&&r.group!="无分组"?"【"+r.group+"】":""}：${r.statusText}</div>
+        `).join("")
+    }
+
+    // 热力柱状图 Chart.js
+    function drawHeatChart(){
+        const labels = studentList.map(i=>i.name)
+        const data = studentList.map(i=>i.callCount||0)
+        const ctx = document.getElementById("heatChartCanvas").getContext("2d")
+        if(heatChart) heatChart.destroy()
+        heatChart = new Chart(ctx,{
+            type:"bar",
+            data:{
+                labels,
+                datasets:[{
+                    label:"点名次数",
+                    data,
+                    backgroundColor:"rgba(250,220,80,0.6)"
+                }]
+            },
+            options:{
+                responsive:true,
+                scales:{
+                    y:{min:0,ticks:{color:"#f8f5e6"}},
+                    x:{ticks:{color:"#f8f5e6",maxRotation:60}}
+                },
+                plugins:{legend:{labels:{color:"#f8f5e6"}}}
+            }
+        })
+    }
+
+    init()
+</script>
+</body>
+</html>
