@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ 智慧创新课堂点名台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        chalk: '#f8f5e6',
+                        blackboard: '#2b4b3c',
+                        techBlue: '#10203b'
+                    },
+                    fontFamily: {
+                        chalk: ['Ma Shan Zheng', 'cursive']
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .blackboard-bg {
+                background: #2b4b3c;
+                background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+                background-size: 24px 24px;
+            }
+            .tech-bg {
+                background: #10203b;
+                background-image: radial-gradient(circle at 50% 50%, #183058 0, transparent 70%);
+            }
+            .chalk-text {
+                color: #f8f5e6;
+                text-shadow: 1px 1px 2px rgba(0,0,0,0.35);
+            }
+            .particle-box {
+                position: relative;
+                overflow: hidden;
+            }
+        }
+        @keyframes rollText {
+            0% {transform: translateY(-120px); opacity:0}
+            50% {opacity:1}
+            100% {transform: translateY(0px); opacity:1}
+        }
+        .roll-animate{
+            animation: rollText 0.12s infinite;
+        }
+        @keyframes firework{
+            0%{transform:scale(0);opacity:1}
+            100%{transform:scale(2);opacity:0}
+        }
+        .firework{
+            animation: firework 0.8s ease forwards;
+        }
+    </style>
+</head>
+<body class="transition-all duration-700" id="appBody">
+    <div class="min-h-screen p-4 md:p-6">
+        <!-- 顶部导航 -->
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-[clamp(1.6rem,4vw,2.6rem)] font-bold chalk-text">
+                <i class="fa fa-graduation-cap"></i> 智慧课堂点名台
+            </h1>
+            <div class="flex gap-3">
+                <button onclick="toggleTheme()" class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 chalk-text transition">
+                    <i class="fa fa-moon-o"></i> 切换主题
+                </button>
+            </div>
+        </header>
+
+        <!-- 🔔 考勤统计面板 -->
+        <div class="rounded-2xl p-4 mb-6 bg-black/20 backdrop-blur">
+            <h2 class="text-xl font-bold chalk-text mb-3"><i class="fa fa-calculator"></i> 实时考勤统计</h2>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+                <div class="bg-white/10 rounded-lg p-3">
+                    <div class="text-2xl font-bold chalk-text" id="statTotal">0</div>
+                    <div class="text-xs chalk-text opacity-70">总人数</div>
+                </div>
+                <div class="bg-white/10 rounded-lg p-3">
+                    <div class="text-2xl font-bold chalk-text" id="statChecked">0</div>
+                    <div class="text-xs chalk-text opacity-70">已点名</div>
+                </div>
+                <div class="bg-emerald-500/20 rounded-lg p-3">
+                    <div class="text-2xl font-bold text-emerald-400" id="statPresent">0</div>
+                    <div class="text-xs chalk-text opacity-70">✅ 到课</div>
+                </div>
+                <div class="bg-orange-500/20 rounded-lg p-3">
+                    <div class="text-2xl font-bold text-orange-400" id="statLate">0</div>
+                    <div class="text-xs chalk-text opacity-70">⏱️ 迟到</div>
+                </div>
+                <div class="bg-rose-500/20 rounded-lg p-3">
+                    <div class="text-2xl font-bold text-rose-400" id="statAbsent">0</div>
+                    <div class="text-xs chalk-text opacity-70">❌ 缺勤</div>
+                </div>
+                <div class="bg-blue-500/20 rounded-lg p-3">
+                    <div class="text-2xl font-bold text-blue-400" id="statRate">0%</div>
+                    <div class="text-xs chalk-text opacity-70">📊 到课率</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <!-- 主点名面板【核心】 -->
+            <div class="lg:col-span-2 rounded-2xl p-5 shadow-xl bg-black/20 backdrop-blur particle-box" id="rollPanel">
+                <div class="text-center py-10">
+                    <div id="nameBox" class="text-[clamp(2rem,7vw,4rem)] font-bold chalk-text h-20 flex items-center justify-center">
+                        准备开始智能点名
+                    </div>
+                    <div class="text-lg chalk-text my-3 opacity-80" id="tipText">加权智能模式｜久未点名同学优先抽取</div>
+
+                    <div class="flex flex-wrap justify-center gap-3 my-5">
+                        <button onclick="startRoll()" id="btnStart" class="px-8 py-3 rounded-xl text-xl font-bold bg-yellow-400 text-gray-800 hover:bg-yellow-300 transition shadow-lg">
+                            <i class="fa fa-play"></i> 开始点名
+                        </button>
+                        <button onclick="stopRoll()" id="btnStop" disabled class="px-8 py-3 rounded-xl text-xl font-bold bg-red-500 text-white hover:bg-red-400 transition shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">
+                            <i class="fa fa-stop"></i> 停止
+                        </button>
+                    </div>
+
+                    <!-- 点名结果操作（已移除幸运免答） -->
+                    <div id="resultAction" class="hidden mt-5">
+                        <div class="flex flex-wrap justify-center gap-3">
+                            <button onclick="setStatus('present')" class="px-4 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600">✅ 到课</button>
+                            <button onclick="setStatus('late')" class="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600">⏱️ 迟到</button>
+                            <button onclick="setStatus('absent')" class="px-4 py-2 rounded-lg bg-rose-500 text-white hover:bg-rose-600">❌ 缺勤</button>
+                        </div>
+                        <p class="mt-3 chalk-text text-lg" id="encourageWord"></p>
+                    </div>
+
+                    <!-- 模式切换 -->
+                    <div class="mt-6 flex flex-wrap justify-center gap-3 chalk-text text-sm">
+                        <label class="flex items-center gap-1">
+                            <input type="checkbox" id="weightMode" checked onchange="saveConfig()"> 智能加权点名
+                        </label>
+                        <label class="flex items-center gap-1">
+                            <input type="checkbox" id="groupMode" onchange="saveConfig()"> 小组点名模式
+                        </label>
+                        <label class="flex items-center gap-1">
+                            <input type="checkbox" id="handUpMode" onchange="saveConfig()"> 举手优先
+                        </label>
+                    </div>
+                </div>
+                <canvas id="fireworkCanvas" class="absolute inset-0 pointer-events-none"></canvas>
+            </div>
+
+            <!-- 侧边栏：名单 + 热力看板 + 【动态签到二维码模块】 -->
+            <div class="space-y-5">
+                <!-- 🆕 动态签到二维码 + 倒计时模块 -->
+                <div class="rounded-2xl p-4 bg-black/20 backdrop-blur">
+                    <h2 class="text-xl font-bold chalk-text mb-3"><i class="fa fa-qrcode"></i> 扫码签到</h2>
+                    <div class="flex items-center justify-center mb-3">
+                        <div id="qrcodeBox" class="bg-white p-2 rounded-lg">
+                            <div id="qrcode"></div>
+                        </div>
+                    </div>
+                    <div class="text-center mb-3">
+                        <div class="text-xl font-bold chalk-text" id="countdownText">未开启签到</div>
+                        <div class="text-xs chalk-text opacity-60">动态密钥签到码，倒计时结束自动失效</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="startCheckIn()" class="flex-1 px-2 py-2 rounded-lg bg-green-500 text-white text-sm hover:bg-green-600">发起签到</button>
+                        <button onclick="stopCheckIn()" class="flex-1 px-2 py-2 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600">结束签到</button>
+                    </div>
+                    <div class="mt-3">
+                        <label class="chalk-text text-sm">签到时长(秒)</label>
+                        <input type="number" id="checkinTimeInput" value="60" min="10" max="300" class="w-full p-2 rounded bg-white/10 chalk-text border border-white/10">
+                    </div>
+                </div>
+
+                <!-- 热力看板 -->
+                <div class="rounded-2xl p-4 bg-black/20 backdrop-blur">
+                    <h2 class="text-xl font-bold chalk-text mb-3"><i class="fa fa-bar-chart"></i> 课堂热力看板</h2>
+                    <canvas id="heatChart" height="180"></canvas>
+                    <p class="chalk-text text-xs mt-2 opacity-70">柱状越高代表被点名次数越多</p>
+                </div>
+
+                <!-- 名单管理 -->
+                <div class="rounded-2xl p-4 bg-black/20 backdrop-blur">
+                    <h2 class="text-xl font-bold chalk-text mb-3"><i class="fa fa-users"></i> 学生名单</h2>
+                    <textarea id="studentInput" class="w-full p-2 rounded bg-white/10 chalk-text placeholder:text-white/40 border border-white/10" rows="4" placeholder="批量导入：每行一个名字，支持逗号分隔"></textarea>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="loadStudentList()" class="flex-1 px-2 py-2 rounded-lg bg-blue-500 text-white text-sm hover:bg-blue-600">导入名单</button>
+                        <button onclick="clearAllList()" class="px-2 py-2 rounded-lg bg-gray-500 text-white text-sm hover:bg-gray-600">清空</button>
+                    </div>
+                    <div class="mt-3 chalk-text text-sm overflow-y-auto max-h-48" id="nameListDom"></div>
+                </div>
+
+                <!-- 点名记录 -->
+                <div class="rounded-2xl p-4 bg-black/20 backdrop-blur">
+                    <h2 class="text-xl font-bold chalk-text mb-3"><i class="fa fa-list-alt"></i> 点名记录</h2>
+                    <div class="chalk-text text-sm max-h-44 overflow-y-auto" id="recordDom"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 数据存储
+        let studentList = JSON.parse(localStorage.getItem("innovRollCall_students")) || [];
+        let callRecord = JSON.parse(localStorage.getItem("innovRollCall_record")) || [];
+        let config = JSON.parse(localStorage.getItem("innovRollCall_config")) || {theme:"blackboard"};
+        let currentSelectStudent = null;
+        let rollTimer = null;
+        let heatChart = null;
+
+        // 🆕 签到相关变量
+        let checkinTimer = null;
+        let qrRefreshTimer = null;
+        let checkinRemaining = 0;
+        let qrcodeObj = null;
+
+        // 鼓励评语库
+        const encourageWords = [
+            "很棒，期待你的精彩回答！",
+            "相信你一定有独到见解👍",
+            "大胆说出你的想法，课堂不怕犯错",
+            "这是一次很好的锻炼机会",
+            "准备好了吗？全班同学都在倾听"
+        ];
+
+        // 初始化
+        function init(){
+            if(config.theme === "tech"){
+                document.getElementById("appBody").classList.add("tech-bg");
+            }else{
+                document.getElementById("appBody").classList.add("blackboard-bg");
+            }
+            renderListDom();
+            renderRecordDom();
+            renderHeatChart();
+            updateStatPanel();
+            document.getElementById("weightMode").checked = config.weightMode ?? true;
+            document.getElementById("groupMode").checked = config.groupMode ?? false;
+            document.getElementById("handUpMode").checked = config.handUpMode ?? false;
+            // 清空二维码初始占位
+            document.getElementById("qrcode").innerHTML = "";
+        }
+
+        // 切换主题
+        function toggleTheme(){
+            const body = document.getElementById("appBody");
+            body.classList.remove("blackboard-bg","tech-bg");
+            if(config.theme === "blackboard"){
+                config.theme = "tech";
+                body.classList.add("tech-bg");
+            }else{
+                config.theme = "blackboard";
+                body.classList.add("blackboard-bg");
+            }
+            saveConfig();
+        }
+
+        function saveConfig(){
+            config.weightMode = document.getElementById("weightMode").checked;
+            config.groupMode = document.getElementById("groupMode").checked;
+            config.handUpMode = document.getElementById("handUpMode").checked;
+            localStorage.setItem("innovRollCall_config", JSON.stringify(config));
+        }
+
+        // 加权随机算法【核心创新】
+        function weightedPick(){
+            if(studentList.length ===0) return null;
+            const weightArr = studentList.map(item=>{
+                const baseWeight = Math.max(1, 10 - (item.callCount||0));
+                return {...item, w: baseWeight};
+            })
+            let totalW = weightArr.reduce((sum,i)=>sum+i.w,0);
+            let rand = Math.random() * totalW;
+            for(let s of weightArr){
+                rand -= s.w;
+                if(rand <=0) return s;
+            }
+            return weightArr[0];
+        }
+
+        // 普通随机
+        function normalPick(){
+            return studentList[Math.floor(Math.random()*studentList.length)];
+        }
+
+        // 开始滚动点名
+        function startRoll(){
+            if(studentList.length === 0){
+                alert("请先导入学生名单！");
+                return;
+            }
+            document.getElementById("btnStart").disabled = true;
+            document.getElementById("btnStop").disabled = false;
+            document.getElementById("resultAction").classList.add("hidden");
+            const nameBox = document.getElementById("nameBox");
+            rollTimer = setInterval(()=>{
+                const pick = config.weightMode ? weightedPick() : normalPick();
+                nameBox.innerText = pick.name;
+                nameBox.classList.add("roll-animate");
+            },80)
+        }
+
+        function stopRoll(){
+            clearInterval(rollTimer);
+            document.getElementById("btnStart").disabled = false;
+            document.getElementById("btnStop").disabled = true;
+            const pick = config.weightMode ? weightedPick() : normalPick();
+            currentSelectStudent = pick;
+            document.getElementById("nameBox").innerText = pick.name;
+            document.getElementById("nameBox").classList.remove("roll-animate");
+            document.getElementById("resultAction").classList.remove("hidden");
+            document.getElementById("encourageWord").innerText = encourageWords[Math.floor(Math.random()*encourageWords.length)];
+            fireworkAnim();
+        }
+
+        // 设置出勤状态
+        function setStatus(status){
+            if(!currentSelectStudent) return;
+            const idx = studentList.findIndex(x=>x.name === currentSelectStudent.name);
+            if(idx !== -1){
+                studentList[idx].callCount = (studentList[idx].callCount||0)+1;
+            }
+            const rec = {
+                name: currentSelectStudent.name,
+                status,
+                time: new Date().toLocaleString()
+            }
+            callRecord.push(rec);
+            localStorage.setItem("innovRollCall_students", JSON.stringify(studentList));
+            localStorage.setItem("innovRollCall_record", JSON.stringify(callRecord));
+            currentSelectStudent = null;
+            document.getElementById("resultAction").classList.add("hidden");
+            document.getElementById("nameBox").innerText = "准备开始智能点名";
+            renderListDom();
+            renderRecordDom();
+            renderHeatChart();
+            updateStatPanel();
+        }
+
+        // 📊 更新考勤统计面板
+        function updateStatPanel(){
+            const total = studentList.length;
+            const present = callRecord.filter(r=>r.status === "present").length;
+            const late = callRecord.filter(r=>r.status === "late").length;
+            const absent = callRecord.filter(r=>r.status === "absent").length;
+            const checked = present + late + absent;
+            const rate = checked>0 ? Math.round( (present / checked)*100 ) : 0;
+
+            document.getElementById("statTotal").innerText = total;
+            document.getElementById("statChecked").innerText = checked;
+            document.getElementById("statPresent").innerText = present;
+            document.getElementById("statLate").innerText = late;
+            document.getElementById("statAbsent").innerText = absent;
+            document.getElementById("statRate").innerText = rate + "%";
+        }
+
+        // 🆕 签到模块：生成动态二维码（随机密钥）
+        function refreshQrCode(){
+            document.getElementById("qrcode").innerHTML = "";
+            // 动态随机密钥，每次刷新二维码内容变化
+            const secretKey = "checkin_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
+            qrcodeObj = new QRCode(document.getElementById("qrcode"), {
+                text: secretKey,
+                width:140,
+                height:140
+            })
+        }
+
+        // 🆕 发起签到
+        function startCheckIn(){
+            const inputVal = Number(document.getElementById("checkinTimeInput").value);
+            if(isNaN(inputVal) || inputVal <10 || inputVal>300){
+                alert("签到时长范围：10~300秒");
+                return;
+            }
+            stopCheckIn();
+            checkinRemaining = inputVal;
+            refreshQrCode();
+            // 每5秒刷新一次二维码，动态密钥，防截图代签
+            qrRefreshTimer = setInterval(()=>{
+                refreshQrCode();
+            },5000)
+
+            checkinTimer = setInterval(()=>{
+                checkinRemaining--;
+                document.getElementById("countdownText").innerText = `剩余 ${checkinRemaining} s`;
+                if(checkinRemaining <= 0){
+                    stopCheckIn();
+                }
+            },1000)
+        }
+
+        // 🆕 结束签到
+        function stopCheckIn(){
+            clearInterval(checkinTimer);
+            clearInterval(qrRefreshTimer);
+            checkinRemaining = 0;
+            document.getElementById("countdownText").innerText = "签到已结束";
+        }
+
+        // 导入名单
+        function loadStudentList(){
+            const text = document.getElementById("studentInput").value.trim();
+            if(!text) return alert("请输入名单");
+            const raw = text.split(/[\n,，]/).map(i=>i.trim()).filter(i=>i);
+            let newList = [];
+            raw.forEach(name=>{
+                const exist = studentList.find(s=>s.name === name);
+                if(exist){
+                    newList.push(exist);
+                }else{
+                    newList.push({name, callCount:0, tag:"normal"})
+                }
+            })
+            studentList = newList;
+            localStorage.setItem("innovRollCall_students", JSON.stringify(studentList));
+            renderListDom();
+            renderHeatChart();
+            updateStatPanel();
+            alert(`成功导入 ${studentList.length} 位同学`);
+        }
+
+        function clearAllList(){
+            if(!confirm("确定清空名单与记录？")) return;
+            studentList = [];
+            callRecord = [];
+            localStorage.setItem("innovRollCall_students", JSON.stringify(studentList));
+            localStorage.setItem("innovRollCall_record", JSON.stringify(callRecord));
+            renderListDom();
+            renderRecordDom();
+            renderHeatChart();
+            updateStatPanel();
+        }
+
+        function renderListDom(){
+            const dom = document.getElementById("nameListDom");
+            dom.innerHTML = studentList.map(i=>`
+                <div class="flex justify-between py-1 border-b border-white/10">
+                    <span>${i.name}</span>
+                    <span class="opacity-60">点名${i.callCount||0}次</span>
+                </div>
+            `).join("")
+        }
+
+        function renderRecordDom(){
+            const dom = document.getElementById("recordDom");
+            dom.innerHTML = callRecord.slice(-12).reverse().map(r=>{
+                let statusText = r.status;
+                if(r.status==="present") statusText="✅到课";
+                if(r.status==="late") statusText="⏱️迟到";
+                if(r.status==="absent") statusText="❌缺勤";
+                return `
+                <div class="py-1 border-b border-white/10 text-xs">
+                    ${r.time}｜${r.name}：${statusText}
+                </div>
+                `
+            }).join("") || "暂无点名记录"
+        }
+
+        // 热力图表
+        function renderHeatChart(){
+            const ctx = document.getElementById("heatChart").getContext("2d");
+            const labels = studentList.map(i=>i.name);
+            const data = studentList.map(i=>i.callCount||0);
+            if(heatChart) heatChart.destroy();
+            heatChart = new Chart(ctx,{
+                type:"bar",
+                data:{
+                    labels,
+                    datasets:[{
+                        label:"点名次数",
+                        data,
+                        backgroundColor:"rgba(250,220,80,0.6)"
+                    }]
+                },
+                options:{
+                    responsive:true,
+                    scales:{
+                        y:{beginAtZero:true,ticks:{color:"#f8f5e6"}},
+                        x:{ticks:{color:"#f8f5e6",maxRotation:45,minRotation:0}}
+                    },
+                    plugins:{legend:{labels:{color:"#f8f5e6"}}}
+                }
+            })
+        }
+
+        // 礼花特效
+        function fireworkAnim(){
+            const canvas = document.getElementById("fireworkCanvas");
+            const ctx = canvas.getContext("2d");
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            let particles = [];
+            for(let i=0;i<60;i++){
+                const angle = Math.PI*2/60*i;
+                particles.push({
+                    x:canvas.width/2,
+                    y:canvas.height/2,
+                    vx:Math.cos(angle)*3,
+                    vy:Math.sin(angle)*3,
+                    life:1
+                })
+            }
+            function draw(){
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                particles.forEach(p=>{
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= 0.02;
+                    ctx.beginPath();
+                    ctx.arc(p.x,p.y,4,0,Math.PI*2);
+                    ctx.fillStyle = `rgba(255,220,80,${p.life})`;
+                    ctx.fill();
+                })
+                if(particles[0].life >0) requestAnimationFrame(draw);
+            }
+            draw();
+        }
+
+        init();
+    </script>
+</body>
+</html>
